@@ -26,26 +26,18 @@ pipeline {
         stage('Deploy to Azure VM') {
             steps {
                 script {
-                    // Create deployment package
                     bat 'powershell Compress-Archive -Path ./publish/* -DestinationPath ./deploy.zip -Force'
                     
-                    // Copy to Azure VM
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ubuntu-deplloyment-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                    sshagent(['azure-vm-ubuntu-deplloyment-ssh-key']) {
+                        bat "scp -o StrictHostKeyChecking=no ./deploy.zip %AZURE_VM_USER%@%AZURE_VM_IP%:/tmp/"
+                        
                         bat """
-                            scp -i %SSH_KEY% -o StrictHostKeyChecking=no ./deploy.zip %AZURE_VM_USER%@%AZURE_VM_IP%:/tmp/
-                        """
-                    }
-                    
-                    // Deploy and restart
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-                        bat """
-                            ssh -i %SSH_KEY% -o StrictHostKeyChecking=no %AZURE_VM_USER%@%AZURE_VM_IP% "
+                            ssh -o StrictHostKeyChecking=no %AZURE_VM_USER%@%AZURE_VM_IP% "
                                 sudo systemctl stop %SERVICE_NAME% &&
                                 sudo rm -rf %DEPLOY_PATH%/* &&
                                 sudo unzip -o /tmp/deploy.zip -d %DEPLOY_PATH% &&
                                 sudo chown -R www-data:www-data %DEPLOY_PATH% &&
-                                sudo systemctl start %SERVICE_NAME% &&
-                                sudo systemctl status %SERVICE_NAME% --no-pager
+                                sudo systemctl start %SERVICE_NAME%
                             "
                         """
                     }
@@ -59,10 +51,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Deployed successfully to http://${AZURE_VM_IP}"
-        }
-        failure {
-            echo "Deployment failed!"
+            echo "Deployed to http://${AZURE_VM_IP}"
         }
     }
 }

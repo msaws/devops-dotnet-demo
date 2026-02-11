@@ -19,7 +19,7 @@ pipeline {
             steps {
                 bat 'dotnet restore DevOpsDotNetDemo.sln'
                 bat 'dotnet build DevOpsDotNetDemo.sln --configuration Release'
-                bat 'dotnet publish DevOpsDotNetDemo/DevOpsDotNetDemo.csproj -c Release -o ./publish'
+                bat 'dotnet publish DevOpsDotNetDemo.csproj -c Release -o ./publish'
             }
         }
         

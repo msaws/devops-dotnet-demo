@@ -25,14 +25,18 @@ pipeline {
         
         stage('Deploy to Azure VM') {
             steps {
-                script {
-                    bat 'powershell Compress-Archive -Path ./publish/* -DestinationPath ./deploy.zip -Force'
-                    
-                    sshagent(['azure-vm-ubuntu-deplloyment-ssh-key']) {
-                        bat "scp -o StrictHostKeyChecking=no ./deploy.zip %AZURE_VM_USER%@%AZURE_VM_IP%:/tmp/"
+                withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ubuntu-deplloyment-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                    script {
+                        // Fix permissions on the key file
+                        bat "icacls %SSH_KEY% /inheritance:r"
+                        bat "icacls %SSH_KEY% /grant:r \"%USERNAME%:R\""
                         
+                        // Copy to Azure VM
+                        bat "scp -i %SSH_KEY% -o StrictHostKeyChecking=no ./deploy.zip %AZURE_VM_USER%@%AZURE_VM_IP%:/tmp/"
+                        
+                        // Deploy and restart
                         bat """
-                            ssh -o StrictHostKeyChecking=no %AZURE_VM_USER%@%AZURE_VM_IP% "
+                            ssh -i %SSH_KEY% -o StrictHostKeyChecking=no %AZURE_VM_USER%@%AZURE_VM_IP% "
                                 sudo systemctl stop %SERVICE_NAME% &&
                                 sudo rm -rf %DEPLOY_PATH%/* &&
                                 sudo unzip -o /tmp/deploy.zip -d %DEPLOY_PATH% &&

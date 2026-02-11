@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+    
+    environment {
+        AZURE_VM_IP = '20.82.160.97'
+        AZURE_VM_USER = 'msa'
+        DEPLOY_PATH = '/home/msa/app'
+        APP_NAME = 'DevOpsDotNetDemo'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                bat 'dotnet restore DevOpsDotNetDemo.sln'
+                bat 'dotnet build DevOpsDotNetDemo.sln --configuration Release'
+                bat 'dotnet publish DevOpsDotNetDemo/DevOpsDotNetDemo.csproj -c Release -o ./publish'
+            }
+        }
+        
+        stage('Deploy to Azure VM') {
+            steps {
+                script {
+                    // Create deployment package
+                    bat 'powershell Compress-Archive -Path ./publish/* -DestinationPath ./deploy.zip -Force'
+                    
+                    // Copy to Azure VM using SCP
+                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                        bat """
+                            scp -i %SSH_KEY% -o StrictHostKeyChecking=no ./deploy.zip %AZURE_VM_USER%@%AZURE_VM_IP%:/tmp/
+                        """
+                    }
+                    
+                    // Execute deployment commands on VM
+                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                        bat """
+                            ssh -i %SSH_KEY% -o StrictHostKeyChecking=no %AZURE_VM_USER%@%AZURE_VM_IP% "mkdir -p %DEPLOY_PATH% && unzip -o /tmp/deploy.zip -d %DEPLOY_PATH%"
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Restart Service') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                        bat """
+                            ssh -i %SSH_KEY% -o StrictHostKeyChecking=no %AZURE_VM_USER%@%AZURE_VM_IP% "sudo systemctl restart %APP_NAME% || echo 'Service not found, will create'"
+                        """
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo "Deployed to http://${AZURE_VM_IP}:5000"
+        }
+    }
+}

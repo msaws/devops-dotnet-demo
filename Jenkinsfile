@@ -30,7 +30,7 @@ pipeline {
                     bat 'powershell Compress-Archive -Path ./publish/* -DestinationPath ./deploy.zip -Force'
                     
                     // Copy to Azure VM
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-vm-ubuntu-deplloyment-ssh-key', keyFileVariable: 'SSH_KEY')]) {
                         bat """
                             scp -i %SSH_KEY% -o StrictHostKeyChecking=no ./deploy.zip %AZURE_VM_USER%@%AZURE_VM_IP%:/tmp/
                         """
